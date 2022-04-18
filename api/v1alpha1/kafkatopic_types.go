@@ -29,16 +29,6 @@ type KafkaTopicSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	TopicName  string `json:"topic-name"`
 	Partitions int32  `json:"partitions"`
-	//DeleteRetentionMS               int64  `json:"delete-retentin-ms,omitempty"`
-	//MaxMessageBytes                 int64  `json:"max-message-bytes,omitempty"`
-	//MaxCompactionLagMS              int64  `json:"max-compaction-lag-ms,omitempty"`
-	//MessageTimestampDifferenceMaxMS int64  `json:"message-timestamp-difference-max-ms,omitempty"`
-	//MinCompactionLagMS              int64  `json:"min-compaction-lag-ms,omitempty"`
-	//MinInsyncReplicas               int64  `json:"min-insync-replicas,omitempty"`
-	//RetentionBytes                  int64  `json:"retention-bytes,omitempty`
-	//RetentionMS                     int64  `json:"retention-ms,omitempty"`
-	//SegmentBytes                    int64  `json:"segment-bytes,omitempty"`
-	//SegmentMS                       int64  `json:"segment-ms,omitempty"`
 }
 
 // KafkaTopicStatus defines the observed state of KafkaTopic

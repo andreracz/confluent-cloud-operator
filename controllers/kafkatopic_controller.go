@@ -38,12 +38,6 @@ type KafkaTopicReconciler struct {
 	Log    logr.Logger
 }
 
-type KafkaCluster struct {
-	Name        string
-	Tenant      string
-	Environment string
-}
-
 //+kubebuilder:rbac:groups=messages.kubbee.tech,resources=kafkatopics,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=messages.kubbee.tech,resources=kafkatopics/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=messages.kubbee.tech,resources=kafkatopics/finalizers,verbs=update
@@ -82,12 +76,20 @@ func (r *KafkaTopicReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	ccloudT := NewConfluentApi("default", "development")
+	ccloudT := NewConfluentApi("default", "default")
 
 	//confluent kafka topic create users --partitions 3  --cluster lkc-57wnz2
-	if environments, err := ccloudT.GetEnvironments(); err == nil {
+	if environments, eErr := ccloudT.GetEnvironments(); eErr == nil {
+		//
+		log.Info("Get the Confluent Cloud Environments", environments)
+		//
 		if ccloudT.SetEnvironment(environments) {
-			if clusterId, err := ccloudT.GetKafkaCluster(); err == nil {
+			//
+			log.Info("The environment was choosed")
+			//
+			if clusterId, cErr := ccloudT.GetKafkaCluster(); cErr == nil {
+				//
+				log.Info("Creating Topic on the Confluent Cloud")
 
 				cTopic := CreationTopic{
 					Tenant:     "",
@@ -97,22 +99,41 @@ func (r *KafkaTopicReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					TopicName:  kafktopic.Spec.TopicName,
 				}
 
-				status, _ := ccloudT.NewTopic(cTopic)
+				status, tErr := ccloudT.NewTopic(cTopic)
 
 				if !status {
+					log.Info("The TopicName was created")
 
-					result := ctrl.Result{
-						Requeue:      status,
-						RequeueAfter: time.Since(start),
-					}
+					//
+					return buildResult(status, time.Since(start)), nil
+				} else {
+					log.Error(tErr, "Error to create the Topicname")
 
-					return result, nil
+					//
+					return buildResult(status, time.Since(start)), tErr
 				}
+			} else {
+				log.Error(cErr, "Error to create the Topicname")
+
+				//
+				return buildResult(false, time.Since(start)), cErr
 			}
 		}
+	} else {
+		log.Error(eErr, "Error to create the Topicname")
+
+		//
+		return buildResult(false, time.Since(start)), eErr
 	}
 
 	return ctrl.Result{}, err
+}
+
+func buildResult(requeue bool, requeueAfter time.Duration) ctrl.Result {
+	return ctrl.Result{
+		Requeue:      requeue,
+		RequeueAfter: requeueAfter,
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
