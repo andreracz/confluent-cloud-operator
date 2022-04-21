@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -61,9 +60,7 @@ func (r *KafkaTopicReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	kafktopic := &messagesv1alpha1.KafkaTopic{}
 
-	err := r.Get(ctx, req.NamespacedName, kafktopic)
-
-	if err != nil {
+	if err := r.Get(ctx, req.NamespacedName, kafktopic); err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
@@ -74,65 +71,62 @@ func (r *KafkaTopicReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// Error reading the object - requeue the request.
 		log.Error(err, "Failed to get KafkaTopic")
 		return ctrl.Result{}, err
-	}
-
-	ccloudT := NewConfluentApi("default", "default")
-
-	//confluent kafka topic create users --partitions 3  --cluster lkc-57wnz2
-	if environments, eErr := ccloudT.GetEnvironments(); eErr == nil {
-		//
-		log.Info("Get the Confluent Cloud Environments", environments)
-		//
-		if ccloudT.SetEnvironment(environments) {
-			//
-			log.Info("The environment was choosed")
-			//
-			if clusterId, cErr := ccloudT.GetKafkaCluster(); cErr == nil {
-				//
-				log.Info("Creating Topic on the Confluent Cloud")
-
-				cTopic := CreationTopic{
-					Tenant:     "",
-					Namespace:  req.NamespacedName.String(),
-					Partitions: fmt.Sprint(kafktopic.Spec.Partitions),
-					ClusterId:  clusterId,
-					TopicName:  kafktopic.Spec.TopicName,
-				}
-
-				status, tErr := ccloudT.NewTopic(cTopic)
-
-				if !status {
-					log.Info("The TopicName was created")
-
-					//
-					return buildResult(status, time.Since(start)), nil
-				} else {
-					log.Error(tErr, "Error to create the Topicname")
-
-					//
-					return buildResult(status, time.Since(start)), tErr
-				}
-			} else {
-				log.Error(cErr, "Error to create the Topicname")
-
-				//
-				return buildResult(false, time.Since(start)), cErr
-			}
-		}
 	} else {
-		log.Error(eErr, "Error to create the Topicname")
 
-		//
-		return buildResult(false, time.Since(start)), eErr
-	}
+		// TODO Read a Secret on the Environment
+		/*
+			ccloudT := NewConfluentApi("default", "default")
 
-	return ctrl.Result{}, err
-}
+			//confluent kafka topic create users --partitions 3  --cluster lkc-57wnz2
+			environments, eErr := ccloudT.GetEnvironments()
 
-func buildResult(requeue bool, requeueAfter time.Duration) ctrl.Result {
-	return ctrl.Result{
-		Requeue:      requeue,
-		RequeueAfter: requeueAfter,
+			if eErr == nil {
+				//
+				log.Info("Get the Confluent Cloud Environments", environments)
+				//
+				if ccloudT.SetEnvironment("") {
+					//
+					log.Info("The environment was choosed")
+					//
+					if clusterId, cErr := ccloudT.GetKafkaCluster(); cErr == nil {
+						//
+						log.Info("Creating Topic on the Confluent Cloud")
+
+						cTopic := CreationTopic{
+							Tenant:     "",
+							Namespace:  req.NamespacedName.String(),
+							Partitions: fmt.Sprint(kafktopic.Spec.Partitions),
+							ClusterId:  clusterId,
+							TopicName:  kafktopic.Spec.TopicName,
+						}
+
+						status, tErr := ccloudT.NewTopic(cTopic)
+
+						if !status {
+							log.Info("The TopicName was created")
+
+							//
+							return buildResult(status, start), nil
+						} else {
+							log.Error(tErr, "Error to create the Topicname")
+
+							//
+							return buildResult(status, start), tErr
+						}
+					} else {
+						log.Error(cErr, "Error to create the Topicname")
+						//
+						return buildResult(false, start), cErr
+					}
+				}
+			}
+
+			log.Error(eErr, "Error to create the Topicname")
+			//
+			return buildResult(false, start), eErr
+		}*/
+
+		return ctrl.Result{}, nil
 	}
 }
 

@@ -53,20 +53,27 @@ func (c *Confluent) GetEnvironments() ([]messagesv1alpha1.Environment, error) {
 }
 
 //
-func (c *Confluent) SetEnvironment(envs []messagesv1alpha1.Environment) bool {
-	status := false
+func (c *Confluent) SelectEnvironment(envs []messagesv1alpha1.Environment) string {
+	var status string
 	for i := 0; i < len(envs); i++ {
 		if envs[i].Name == c.Environment {
-			cmd := exec.Command("/bin/confluent", "environment", "use", envs[i].Id)
-
-			if err := cmd.Run(); err == nil {
-				status = true
-			}
-
+			status = envs[i].Id
 			break
 		}
 	}
 	return status
+}
+
+//
+func (c *Confluent) SetEnvironment(environmentId string) bool {
+
+	cmd := exec.Command("/bin/confluent", "environment", "use", environmentId)
+
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+
+	return false
 }
 
 //
