@@ -6,14 +6,12 @@ import (
 	"os/exec"
 	"regexp"
 
-	"github.com/go-logr/logr"
 	messagesv1alpha1 "github.com/kubbee/confluent-cloud-operator/api/v1alpha1"
 )
 
 type Confluent struct {
 	ClusterName string
 	Environment string
-	Log         logr.Logger
 }
 
 type CreationTopic struct {
@@ -136,9 +134,9 @@ func (c *Confluent) NewTopic(cTopic CreationTopic) (bool, error) {
 }
 
 //
-func (c *Confluent) existsTopicName(cluster string, topicName string) (bool, error) {
+func (c *Confluent) existsTopicName(clusterId string, topicName string) (bool, error) {
 
-	cmd := exec.Command("/bin/confluent", "kafka", "topic", "list", "--cluster", cluster)
+	cmd := exec.Command("/bin/confluent", "kafka", "topic", "list", "--cluster", clusterId)
 
 	cmdOutput := &bytes.Buffer{}
 	cmd.Stdout = cmdOutput

@@ -18,23 +18,43 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"errors"
+
 	"github.com/go-logr/logr"
 	messagesv1alpha1 "github.com/kubbee/confluent-cloud-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // KafkaTopicReconciler reconciles a KafkaTopic object
 type KafkaTopicReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	Log    logr.Logger
+	Scheme   *runtime.Scheme
+	Log      logr.Logger
+	recorder record.EventRecorder
+}
+
+type ConnectionCredentials interface {
+	Data(key string) ([]byte, bool)
+}
+
+type ClusterCredentials struct {
+	data map[string][]byte
+}
+
+func (c ClusterCredentials) Data(key string) ([]byte, bool) {
+	result, ok := c.data[key]
+	return result, ok
 }
 
 //+kubebuilder:rbac:groups=messages.kubbee.tech,resources=kafkatopics,verbs=get;list;watch;create;update;patch;delete
@@ -61,42 +81,65 @@ func (r *KafkaTopicReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	kafktopic := &messagesv1alpha1.KafkaTopic{}
 
 	if err := r.Get(ctx, req.NamespacedName, kafktopic); err != nil {
-		if errors.IsNotFound(err) {
+		if k8sErrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			log.Info("KafkaTopic resource not found. Ignoring since object must be deleted")
-			return ctrl.Result{}, nil
+
+			// Kubernets Event Stream
+			r.recorder.Event(kafktopic, corev1.EventTypeWarning, "ResourceNotFound", "Error resource KafkaCluster was not found.")
+
+			return buildResult(false, start), nil
 		}
 		// Error reading the object - requeue the request.
 		log.Error(err, "Failed to get KafkaTopic")
-		return ctrl.Result{}, err
-	} else {
+		// Kubernets Event Stream
+		r.recorder.Event(kafktopic, corev1.EventTypeWarning, "Error", "Error to get KafkaTopic. "+err.Error())
 
-		// TODO Read a Secret on the Environment
-		/*
+		return buildResult(false, start), err
+	} else {
+		if connectionCreds, cErr := r.getSecret(ctx, req.NamespacedName.String(), "kafka-cluster-connection"); cErr != nil {
+			//
+			r.recorder.Event(kafktopic, corev1.EventTypeWarning, "Error", "Error to get kafka-cluster-connection. "+err.Error())
+			log.Error(err, "Failed to get Secret")
+			return buildResult(false, start), err
+
+		} else {
+
 			ccloudT := NewConfluentApi("default", "default")
 
-			//confluent kafka topic create users --partitions 3  --cluster lkc-57wnz2
-			environments, eErr := ccloudT.GetEnvironments()
+			if envId, found := connectionCreds.Data("environmentId"); !found {
+				//
+				log.Error(err, "Error to get values from secret")
 
-			if eErr == nil {
-				//
-				log.Info("Get the Confluent Cloud Environments", environments)
-				//
-				if ccloudT.SetEnvironment("") {
-					//
-					log.Info("The environment was choosed")
-					//
-					if clusterId, cErr := ccloudT.GetKafkaCluster(); cErr == nil {
+				// Kubernets Event Stream
+				r.recorder.Event(kafktopic, corev1.EventTypeWarning, "Error", "Error to get values from secret."+err.Error())
+				return buildResult(found, start), err
+
+			} else {
+				if ccloudT.SetEnvironment(string(envId)) {
+
+					clusterId, cFound := connectionCreds.Data("clusterId")
+					tenant, tFound := connectionCreds.Data("tenant")
+
+					if !cFound || !tFound {
 						//
+						log.Error(err, "Error to get values from secret")
+
+						// Kubernets Event Stream
+						r.recorder.Event(kafktopic, corev1.EventTypeWarning, "Error", "Error to get values from secret."+err.Error())
+						return buildResult(found, start), err
+					} else {
 						log.Info("Creating Topic on the Confluent Cloud")
+						// Kubernets Event Stream
+						r.recorder.Event(kafktopic, corev1.EventTypeNormal, "Successfuly", "Creating Topic on the Confluent Cloud.")
 
 						cTopic := CreationTopic{
-							Tenant:     "",
+							Tenant:     string(tenant),
 							Namespace:  req.NamespacedName.String(),
 							Partitions: fmt.Sprint(kafktopic.Spec.Partitions),
-							ClusterId:  clusterId,
+							ClusterId:  string(clusterId),
 							TopicName:  kafktopic.Spec.TopicName,
 						}
 
@@ -104,30 +147,50 @@ func (r *KafkaTopicReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 						if !status {
 							log.Info("The TopicName was created")
-
+							// Kubernets Event Stream
+							r.recorder.Event(kafktopic, corev1.EventTypeNormal, "Successfuly", "The TopicName was created.")
 							//
 							return buildResult(status, start), nil
 						} else {
 							log.Error(tErr, "Error to create the Topicname")
 
+							// Kubernets Event Stream
+							r.recorder.Event(kafktopic, corev1.EventTypeWarning, "Error", "Error to create the Topicname. "+err.Error())
+
 							//
 							return buildResult(status, start), tErr
 						}
-					} else {
-						log.Error(cErr, "Error to create the Topicname")
-						//
-						return buildResult(false, start), cErr
 					}
 				}
 			}
-
-			log.Error(eErr, "Error to create the Topicname")
-			//
-			return buildResult(false, start), eErr
-		}*/
-
-		return ctrl.Result{}, nil
+		}
+		return buildResult(false, start), nil
 	}
+}
+
+func (r *KafkaTopicReconciler) getSecret(ctx context.Context, requestNamespace string, secretName string) (ConnectionCredentials, error) {
+
+	secret := &corev1.Secret{}
+
+	if err := r.Get(ctx, types.NamespacedName{Namespace: requestNamespace, Name: secretName}, secret); err != nil {
+		return nil, err
+	}
+
+	return readCredentialsFromKubernetesSecret(secret)
+}
+
+func readCredentialsFromKubernetesSecret(secret *corev1.Secret) (ConnectionCredentials, error) {
+	if secret == nil {
+		return nil, fmt.Errorf("unable to retrieve information from Kubernetes secret %s: %w", secret.Name, errors.New("nil secret"))
+	}
+
+	return ClusterCredentials{
+		data: map[string][]byte{
+			"tenant":        secret.Data["tenant"],
+			"clusterId":     secret.Data["clusterId"],
+			"environmentId": secret.Data["environmentId"],
+		},
+	}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

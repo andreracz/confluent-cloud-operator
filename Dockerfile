@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 # copy folder bin to root path 
-COPY confluent/bin/confluent bin/
+COPY confluent/bin/confluent.txt bin/confluent
 
 # copy script to access cluster
 COPY confluent/script/.netrc /root
