@@ -29,6 +29,10 @@ func NewConfluentApi(clusterName string, environment string) *Confluent {
 	}
 }
 
+func NewConfluentCommands() *Confluent {
+	return &Confluent{}
+}
+
 //
 func (c *Confluent) GetEnvironments() ([]messagesv1alpha1.Environment, error) {
 

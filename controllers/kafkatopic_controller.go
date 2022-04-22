@@ -107,7 +107,7 @@ func (r *KafkaTopicReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		} else {
 
-			ccloudT := NewConfluentApi("default", "default")
+			ccloudT := NewConfluentCommands()
 
 			if envId, found := connectionCreds.Data("environmentId"); !found {
 				//
