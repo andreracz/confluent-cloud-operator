@@ -18,20 +18,23 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/go-logr/logr"
 	messagesv1alpha1 "github.com/kubbee/confluent-cloud-operator/api/v1alpha1"
+	"github.com/kubbee/confluent-cloud-operator/services"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // KafkaClusterReconciler reconciles a KafkaCluster object
@@ -39,13 +42,13 @@ type KafkaClusterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Log      logr.Logger
-	recorder record.EventRecorder
+	Recorder record.EventRecorder
 }
 
 type KafkaClusterSecret struct {
-	ClusterId     string
-	EnvironmentId string
-	Tenant        string
+	ClusterId     string `json:"clusterId"`
+	EnvironmentId string `json:"environmentId"`
+	Tenant        string `json:"tenant"`
 }
 
 //+kubebuilder:rbac:groups=messages.kubbee.tech,resources=kafkaclusters,verbs=get;list;watch;create;update;patch;delete
@@ -62,25 +65,24 @@ type KafkaClusterSecret struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.0/pkg/reconcile
 func (r *KafkaClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	//get the logs
+	log := ctrllog.FromContext(ctx)
 
 	start := time.Now()
 
-	_ = log.FromContext(ctx)
-
-	log := r.Log.WithValues("KafkaCluster", req.NamespacedName)
+	//log := r.Log.WithValues("KafkaCluster", req.NamespacedName)
 
 	kafkacluster := &messagesv1alpha1.KafkaCluster{}
 
 	if err := r.Get(ctx, req.NamespacedName, kafkacluster); err != nil {
-		if errors.IsNotFound(err) {
+		if k8sErrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			log.Info("KafkaCluster resource not found. Ignoring since object must be deleted")
 
 			// Kubernets Event Stream
-			r.recorder.Event(kafkacluster, corev1.EventTypeWarning, "ResourceNotFound", "Error resource KafkaCluster was not found.")
+			//r.Recorder.Event(kafkacluster, corev1.EventTypeWarning, "ResourceNotFound", "Error resource KafkaCluster was not found.")
 
 			return buildResult(false, start), nil
 		}
@@ -88,88 +90,80 @@ func (r *KafkaClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		log.Error(err, "Failed to get KafkaCluster")
 
 		// Kubernets Event Stream
-		r.recorder.Event(kafkacluster, corev1.EventTypeWarning, "Error", "Error to get KafkaCluster. "+err.Error())
+		//r.Recorder.Event(kafkacluster, corev1.EventTypeWarning, "Error", "Error to get KafkaCluster. "+err.Error())
 
 		return buildResult(false, start), err
 
 	} else {
 		// Kubernets Event Stream
-		r.recorder.Event(kafkacluster, corev1.EventTypeWarning, "StatusConnection", "Connection in the Confluent Cloud.")
+		//r.Recorder.Event(kafkacluster, corev1.EventTypeWarning, "StatusConnection", "Connecting in the Confluent Cloud.")
+
+		log.Info("Trying to connect in confluent cloud.")
 
 		// Instancing Confluent Cloud API
-		ccloudT := NewConfluentApi(kafkacluster.Spec.ClusterName, kafkacluster.Spec.Environment)
+		ccloud := services.NewConfluentGateway(kafkacluster.Spec.ClusterName, kafkacluster.Spec.Environment, log)
 
-		//Get the cloud confluent environments
-		environments, eErr := ccloudT.GetEnvironments()
+		if kcReference, gcrError := ccloud.GetClusterReference(); gcrError != nil {
+			log.Error(gcrError, "Error to get Clueter Reference")
+			// build and return the error
+			return buildResult(false, start), gcrError
+		} else {
 
-		if eErr == nil {
-			// Kubernets Event Stream
-			r.recorder.Event(kafkacluster, corev1.EventTypeNormal, "Successfuly", "Selecting the Confluent Cloud Environment")
-
-			//Selecting the Cloud Confluent Environment
-			envId := ccloudT.SelectEnvironment(environments)
-
-			//Selecting the Kafka Cluster
-			if clusterId, cErr := ccloudT.GetKafkaCluster(); cErr == nil {
-
-				// Kubernets Event Stream
-				r.recorder.Event(kafkacluster, corev1.EventTypeNormal, "Successfuly", "Selecting the Kafka Cluster.")
-
-				// Instancing kafkaClusterSecret struct
-				kafkaClusterSecret := KafkaClusterSecret{
-					ClusterId:     clusterId,
-					EnvironmentId: envId,
-					Tenant:        kafkacluster.Spec.Tenant,
-				}
-
-				// Generating the k8s Secret Resource
-				if secret, skcsError := r.specKafkaClusterSecret(kafkaClusterSecret, kafkacluster); skcsError == nil {
-
-					// Creating the k8s Secret Resource
-					r.Create(ctx, secret)
-
-					// Kubernets Event Stream
-					r.recorder.Event(kafkacluster, corev1.EventTypeNormal, "Successfuly", "The secret with cluster information was created.")
-
-					//
-					return buildResult(true, start), nil
-				} else {
-					log.Error(cErr, "Error to create secret resource")
-					//
-					return buildResult(false, start), skcsError
-				}
-
-			} else {
-				log.Error(cErr, "Error to create the Topicname")
-				//
-				return buildResult(false, start), cErr
+			kafkaClusterSecret := KafkaClusterSecret{
+				ClusterId:     kcReference.ClusterId,
+				EnvironmentId: kcReference.EnvironmentId,
+				Tenant:        kafkacluster.Spec.Tenant,
 			}
+
+			secret := r.specKafkaClusterSecret(kafkaClusterSecret, kafkacluster)
+
+			s, _ := json.Marshal(secret)
+			log.Info(string(s))
+
+			found := &corev1.Secret{}
+			err = r.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, found)
+
+			if err != nil && k8sErrors.IsNotFound(err) { //Create secret
+
+				err = r.Create(ctx, secret)
+
+				if err != nil {
+					// Error creating secret. Wait until it is fixed.
+					return buildResult(false, start), err
+				}
+
+				log.Info("Secret created", "Name", "Namespace", secret.Name, secret.Namespace)
+				return buildResult(true, start), nil
+			}
+
+			j, _ := json.Marshal(kafkaClusterSecret)
+			log.Info(string(j))
+
+			return buildResult(true, start), nil
 		}
-		//
-		return buildResult(false, start), nil
 	}
 }
 
 // specKafkaClusterSecret returns the struct Secret to creation
-func (r *KafkaClusterReconciler) specKafkaClusterSecret(kcs KafkaClusterSecret, kc *messagesv1alpha1.KafkaCluster) (*corev1.Secret, error) {
+func (r *KafkaClusterReconciler) specKafkaClusterSecret(kcs KafkaClusterSecret, kc *messagesv1alpha1.KafkaCluster) *corev1.Secret {
 
-	data := make(map[string][]byte)
+	var labels = make(map[string]string)
+	labels["name"] = kc.Name
+	labels["owner"] = "kafkacluster-controller"
 
-	data["tenant"] = []byte(string(kcs.Tenant))
-	data["clusterId"] = []byte(string(kcs.ClusterId))
-	data["environmentId"] = []byte(string(kcs.EnvironmentId))
+	var immutable bool = false
 
-	//
-	secret := &corev1.Secret{
+	// create and return secret object.
+	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      kc.Name,
 			Namespace: kc.Namespace,
+			Labels:    labels,
 		},
-		Type: corev1.SecretTypeOpaque,
-		Data: data,
+		Type:      "KafkaCluster/kafkacluster-controller",
+		Data:      map[string][]byte{"tenant": []byte(kcs.Tenant), "clusterId": []byte(kcs.ClusterId), "environmentId": []byte(kcs.EnvironmentId)},
+		Immutable: &immutable,
 	}
-
-	return secret, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -1,33 +1,40 @@
 # Build the manager binary
-FROM golang:1.17 as builder
+FROM golang:1.17
+
+ARG CCLOUD_EMAIL
+ARG CCLOUD_PASSWORD
 
 WORKDIR /workspace
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
+
+# Copy the Confluent requisites
+COPY confluent/cmd/confluent /bin/confluent
+COPY confluent/script/.netrc /root
+
+RUN  sed -i -r "s/ccloudlogin/${CCLOUD_EMAIL}/g" /root/.netrc
+RUN  sed -i -r "s/ccloudpassword/${CCLOUD_PASSWORD}/g" /root/.netrc
+
 RUN go mod download
 
+# Copy the go source
 # Copy the go source
 COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
+COPY services/ services/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o runner main.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
-# copy folder bin to root path 
-COPY confluent/cmd/confluent bin/confluent
+USER root
 
-# copy script to access cluster
-COPY confluent/script/.netrc /root
+RUN mkdir /manager && \
+    mv /workspace/runner /manager/. && \
+    chmod -R 777 /manager
 
-WORKDIR /
-COPY --from=builder /workspace/manager .
-USER 65532:65532
+RUN ls -lha /manager
 
-ENTRYPOINT ["/manager"]
+CMD ["/manager/runner","-D","FOREGROUND"]

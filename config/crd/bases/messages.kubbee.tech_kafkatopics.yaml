@@ -38,13 +38,13 @@ spec:
               partitions:
                 format: int32
                 type: integer
-              topic-name:
+              topicName:
                 description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
                   Important: Run "make" to regenerate code after modifying this file'
                 type: string
             required:
             - partitions
-            - topic-name
+            - topicName
             type: object
           status:
             description: KafkaTopicStatus defines the observed state of KafkaTopic

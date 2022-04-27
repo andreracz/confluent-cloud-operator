@@ -35,7 +35,7 @@ spec:
           spec:
             description: KafkaClusterSpec defines the desired state of KafkaCluster
             properties:
-              cluste-name:
+              clusterName:
                 description: Foo is an example field of KafkaCluster. Edit kafkacluster_types.go
                   to remove/update
                 type: string
@@ -44,12 +44,22 @@ spec:
               tenant:
                 type: string
             required:
-            - cluste-name
+            - clusterName
             - environment
             - tenant
             type: object
           status:
             description: KafkaClusterStatus defines the observed state of KafkaCluster
+            properties:
+              nodes:
+                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                  of cluster Important: Run "make" to regenerate code after modifying
+                  this file'
+                items:
+                  type: string
+                type: array
+            required:
+            - nodes
             type: object
         type: object
     served: true

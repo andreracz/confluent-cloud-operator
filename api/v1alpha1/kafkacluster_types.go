@@ -29,7 +29,7 @@ type KafkaClusterSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of KafkaCluster. Edit kafkacluster_types.go to remove/update
-	ClusterName string `json:"cluste-name"`
+	ClusterName string `json:"clusterName"`
 	Environment string `json:"environment"`
 	Tenant      string `json:"tenant"`
 }
@@ -38,6 +38,7 @@ type KafkaClusterSpec struct {
 type KafkaClusterStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Nodes []string `json:"nodes"`
 }
 
 //+kubebuilder:object:root=true

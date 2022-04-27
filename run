@@ -1,0 +1,19 @@
+#!/bin/bash
+
+#
+make generate
+
+#
+make manifests
+
+#
+podman build -t controller --build-arg CCLOUD_EMAIL=lhs.ribas@icloud.com --build-arg CCLOUD_PASSWORD=@sofega3758L .
+
+#
+podman tag localhost/controller:latest docker.io/lhsribas/controller:latest
+
+#
+podman push docker.io/lhsribas/controller:latest
+
+#
+make deploy

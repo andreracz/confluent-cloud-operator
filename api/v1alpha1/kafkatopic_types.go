@@ -27,7 +27,7 @@ import (
 type KafkaTopicSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	TopicName  string `json:"topic-name"`
+	TopicName  string `json:"topicName"`
 	Partitions int32  `json:"partitions"`
 }
 
