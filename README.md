@@ -1,6 +1,6 @@
 # Confluent Cloud Operator
 
-This operator is an abstraction of the confluent-cli for cloud, the benefits of this operator is create topics inside a cluster Kafka managed by Conflunt on the cloud.
+This operator is an abstraction of the confluent-cli for cloud, the benefits of this operator is create topics inside a cluster Kafka managed by Confluent on the cloud.
 
 For run this operator on your kubernetes cluster is necessary follow some steps, one of the is generates the image on your registry with your configuration to access the confluent cloud.
 
@@ -8,9 +8,9 @@ Now let's go to apply this operator, to facilitate the creation of your topics.
 
 ### Step By Step
 
-Obviously the primordia step is check out this repo in your machine for execute the commnads.
+Obviously the primordial step is check out this repo in your machine to execute the commnads.
 
-1. Go for the path the operator, and run the command.
+1. Go for the path of the operator, and run the command.
 
 Always you make some update on the files ***_types.go** is an obligation run the instruction.
 
@@ -22,28 +22,28 @@ $ make generate
 > The above makefile target will invoke the controller-gen utility to update the api/v1alpha1/zz_generated.deepcopy.go file to ensure our API’s Go type definitions implement the runtime.Object interface that all Kind types must implement.
 
 
-2. The next command is to build the manifests of the operator, its command is important because if do some update in the type, problably you change the CRD. Then to reflect the updates run the instruction.
+2. The next command is to build the manifests of the operator, this command is important because if update anything in the type, probably you need to change the CRD. Then to reflect the updates run the instruction.
 
 ``` bash
 $ make manifests
 
 ```
 
-3. let's go to enter in another category of commands, in my machine I run the PODMAN containers, then I use the command PODMAN to build images, if you use Docker only needs to replace PODMAN to DOCKER.
+3. Now, let's enter another category of commands, in my machine I run PODMAN containers, then I use the command PODMAN to build images, if you use Docker you only need to replace PODMAN with DOCKER.
 
 ``` bash
 $ podman build -t controller --build-arg CCLOUD_EMAIL=put-the-email --build-arg CCLOUD_PASSWORD=put-the-password .
 
 ```
-> Attention we have to args to build the image, _put-the-email_ and _put-the-password_ this two arguments is your login on the cloud cnfluent.
+> Attention we have to args to build the image, _put-the-email_ and _put-the-password_ this two arguments is your login on the confluent cloud.
 
-4. Now we have a locally image, then is necessary to tag the image for your registry, in my case is dockerhub.io
+4. Now we have a local image, then is necessary to tag the image for your registry, in my case is dockerhub.io
 
 ``` bash
 $ podman tag localhost/controller:latest docker.io/lhsribas/controller:latest
 
 ```
-5. before to push the image to remote registry repo, is necessary to perfom the login on the registry
+5. before you push the image to remote registry repo, is necessary to perfom the login on the registry
 
 ``` bash
 $ docker login put-your-registry
@@ -63,7 +63,7 @@ $ make deploy
 
 ```
 
-## On the Kubernetes
+## On Kubernetes
 
 Now you have the operator runnig inside of your kubernetes cluster and to test the Operator execute the follow commands.
 
